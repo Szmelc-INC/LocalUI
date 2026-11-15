@@ -1,0 +1,7 @@
+# makepkg
+/src/
+/pkg/
+/*.pkg.tar.*
+# runtime
+/config/ui.json
+/data/

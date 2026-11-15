@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# localui - serve LocalUI from a writable per-user copy.
+#
+# LocalUI keeps config/ and data/ next to its code. A packaged install is
+# read-only, so the launcher syncs the code into $LOCALUI_HOME on every start
+# and leaves the user's config/ui.json and data/ untouched. Run from a git
+# checkout, it serves the checkout in place.
+set -euo pipefail
+
+VERSION=0.2.0
+ADDR=${LOCALUI_ADDR:-127.0.0.1:2137}
+HOME_DIR=${LOCALUI_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/localui}
+OPEN=0
+LAYOUT=
+
+if [[ -t 1 && -z ${NO_COLOR:-} ]]; then C=$'\e[38;2;31;138;138m' R=$'\e[38;2;184;58;58m' B=$'\e[1m' N=$'\e[0m'
+else C= R= B= N=; fi
+
+usage() {
+  cat <<EOF
+${B}${C}localui${N} $VERSION - local web UI for system apps
+
+${B}Usage:${N}
+  localui [options]            sync and serve LocalUI
+  localui layouts              list bundled layouts
+  localui path                 print the instance directory
+
+${B}Options:${N}
+  -a, --addr HOST:PORT   listen address (default: $ADDR, env LOCALUI_ADDR)
+  -d, --home DIR         instance directory (default: $HOME_DIR, env LOCALUI_HOME)
+  -l, --layout NAME      copy config/ui.NAME.json to config/ui.json first
+  -o, --open             open the UI in the default browser
+      --no-color         disable colors (also NO_COLOR)
+  -V, --version          print version
+  -h, --help             this help
+EOF
+}
+
+die() { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+cmd=serve
+while (($#)); do
+  case $1 in
+    -a|--addr) ADDR=${2:?--addr needs HOST:PORT}; shift 2 ;;
+    -d|--home) HOME_DIR=${2:?--home needs a directory}; shift 2 ;;
+    -l|--layout) LAYOUT=${2:?--layout needs a name}; shift 2 ;;
+    -o|--open) OPEN=1; shift ;;
+    --no-color) C= R= B= N=; shift ;;
+    -V|--version) echo "localui $VERSION"; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    layouts|path|serve) cmd=$1; shift ;;
+    *) die "unknown argument: $1 (see localui --help)" ;;
+  esac
+done
+
+here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+if [[ -f $here/../public/index.php ]]; then
+  src=$(cd "$here/.." && pwd)                # git checkout: serve in place
+  HOME_DIR=$src
+else
+  src=$(cd "$here/../share/localui" && pwd)  # installed package
+  mkdir -p "$HOME_DIR/config" "$HOME_DIR/data"
+  for d in api lib public browser; do
+    rm -rf "${HOME_DIR:?}/$d"
+    cp -r "$src/$d" "$HOME_DIR/$d"
+    chmod -R u+w "$HOME_DIR/$d"
+  done
+  for f in "$src"/config/*.json; do
+    install -m644 "$f" "$HOME_DIR/config/"  # shipped samples and layouts
+  done
+fi
+
+case $cmd in
+  path) echo "$HOME_DIR"; exit 0 ;;
+  layouts)
+    for f in "$HOME_DIR"/config/ui.*.json; do n=${f##*/ui.}; printf '%s%s%s\n' "$C" "${n%.json}" "$N"; done
+    exit 0 ;;
+esac
+
+if [[ -n $LAYOUT ]]; then
+  [[ -f $HOME_DIR/config/ui.$LAYOUT.json ]] || die "no layout '$LAYOUT' (see localui layouts)"
+  cp "$HOME_DIR/config/ui.$LAYOUT.json" "$HOME_DIR/config/ui.json"
+fi
+[[ -f $HOME_DIR/config/ui.json ]] || cp "$HOME_DIR/config/ui.sample.json" "$HOME_DIR/config/ui.json"
+
+command -v php >/dev/null || die "php is not installed"
+printf '%slocalui%s serving %s on %shttp://%s%s\n' "$B$C" "$N" "$HOME_DIR" "$C" "$ADDR" "$N"
+if ((OPEN)); then (sleep 1; xdg-open "http://$ADDR" >/dev/null 2>&1 || true) & fi
+exec php -S "$ADDR" -t "$HOME_DIR/public"
