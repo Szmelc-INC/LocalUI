@@ -149,3 +149,24 @@ Create `config/ui.json` following the structure below. Each element describes a 
 - Arguments with forbidden shell metacharacters are rejected before execution.
 - Command results are cached in `data/*.json` so they can be retrieved via `GET /api/read`.
 - The UI polls output widgets automatically when `mode` is set to `"poll"`.
+
+## Install
+
+[![nix](https://github.com/Szmelc-INC/LocalUI/actions/workflows/nix.yml/badge.svg)](https://github.com/Szmelc-INC/LocalUI/actions/workflows/nix.yml)
+
+**Arch Linux** via [SAUR](https://github.com/Szmelc-INC/SAUR):
+
+```sh
+curl -fsSL https://szmelc-inc.github.io/SAUR/add | sudo bash   # once: adds [saur] to pacman.conf
+sudo pacman -S localui-git
+```
+
+**Nix**:
+
+```sh
+nix run github:Szmelc-INC/LocalUI
+nix profile install github:Szmelc-INC/LocalUI
+nix develop          # dev shell inside a clone
+```
+
+Then run `localui --help`.
